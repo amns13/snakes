@@ -8,17 +8,17 @@ Each cell in the grid has following attributes:
     - next direction
 """
 
-import fcntl
-import random
 import os
+import random
 import sys
-import termios
 import threading
 import time
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
 from typing import Optional
+
+from src.context_managers import single_char_input_mode
 
 
 class Direction(int, Enum):
@@ -183,43 +183,8 @@ class Game:
             "j": Direction.DOWN,
             "l": Direction.RIGHT,
         }
-        try:
-            ##########    BOILERPLATE TO ENABLE READING SINGLE CHARACTER FROM INPUT AT A TIME ##########
-            # TODO: See if this can be converted into a context manager
 
-            # This code block is to make sure that we can read one character input at a time without the need to click enter.
-            # Ref: https://docs.python.org/2/faq/library.html#how-do-i-get-a-single-keypress-at-a-time
-
-            # Get the file descriptor of standard input.
-            # Ref: https://stackoverflow.com/a/32199696/9152588
-            # Ref: https://en.wikipedia.org/wiki/File_descriptor
-            fd = sys.stdin.fileno()
-
-            # `termios` module provides an interface to unix tty.
-            # Ref: https://docs.python.org/3/library/termios.html
-            # Ref: https://manpages.debian.org/bookworm/manpages-dev/termios.3.en.html
-
-            # Store the existing state of the tty/terminal
-            oldterm = termios.tcgetattr(fd)
-
-            newattr = termios.tcgetattr(fd)
-            # Disable canonical mode. In noncanonical mode input is available immediately
-            # without the user having to type a line-delimiter character.
-            # Also, disable echo to prevent printing the user input in terminal.
-            # Refer the termios documentation linked above.
-            newattr[3] = newattr[3] & ~termios.ICANON & ~termios.ECHO
-            # Update the tty properties. `TCSANOW` flag makes the changes immediately.
-            termios.tcsetattr(fd, termios.TCSANOW, newattr)
-
-            # `fcntl` module provides an interface to unix fcntl. This allows to manipulate the file descriptor.
-            # Ref: https://docs.python.org/3/library/fcntl.html
-            # Ref: https://manpages.debian.org/bookworm/manpages-dev/fcntl.2.en.html
-            oldflags = fcntl.fcntl(fd, fcntl.F_GETFL)
-            # Set the standard input to non-blocking mode.
-            # Ref: https://www.geeksforgeeks.org/non-blocking-io-with-pipes-in-c/
-            fcntl.fcntl(fd, fcntl.F_SETFL, oldflags | os.O_NONBLOCK)
-            #######################################################
-
+        with single_char_input_mode():
             while True:
                 try:
                     c = sys.stdin.read(1)
@@ -236,9 +201,6 @@ class Game:
                         self.move_snake_and_render_screen()
                 except (IOError, KeyError):
                     pass
-        finally:
-            termios.tcsetattr(fd, termios.TCSAFLUSH, oldterm)
-            fcntl.fcntl(fd, fcntl.F_SETFL, oldflags)
 
 
 def clear_screen():
@@ -261,24 +223,3 @@ def next_location(
             next_x = (next_x - 1) % row_count
 
     return (next_x, next_y)
-
-
-def start_game(rows: int, cols: int):
-    game = Game(row_count=rows, col_count=cols)
-    # TODO: Remove asserts after test cases are added
-    assert game.head.is_head()
-    assert game.head is not None
-
-    game.render_screen()
-    game_loop = threading.Thread(target=game.refresh_game_state)
-    user_input_loop = threading.Thread(target=game.take_input)
-    game_loop.start()
-    user_input_loop.start()
-
-
-def main():
-    start_game(10, 10)
-
-
-if __name__ == "__main__":
-    main()
