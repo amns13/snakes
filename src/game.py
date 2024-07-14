@@ -210,6 +210,18 @@ def clear_screen():
 def next_location(
     row_count: int, col_count: int, x: int, y: int, direction: Direction
 ) -> tuple[int, int]:
+    """ Find the next location of the cell as per the direction
+
+    Args:
+        row_count: Number of horizontal rows in the game
+        col_count: Number of vertical rows in the game
+        x: X-coordinate
+        y: Y-coordinate
+        direction: Current direction
+
+    Returns:
+        Next coordinate of the cell
+    """
     next_x = x
     next_y = y
     match direction:
