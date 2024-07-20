@@ -1,6 +1,6 @@
 import threading
 
-from src.screen import Game
+from snakes.screen import Game
 
 
 def start_game(rows: int, cols: int):

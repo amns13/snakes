@@ -18,7 +18,7 @@ from enum import Enum
 from functools import cached_property
 from typing import Optional
 
-from src.context_managers import single_char_input_mode
+from snakes.context_managers import single_char_input_mode
 
 
 class Direction(int, Enum):

@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from src.game import HEAD, Direction, Game, next_location
+from snakes.game import HEAD, Direction, Game, next_location
 
 
 class NextLocationTestCase(TestCase):
