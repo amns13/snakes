@@ -1,13 +1,10 @@
 import threading
 
-from snakes.screen import Game
+from snakes.game import Game
 
 
 def start_game(rows: int, cols: int):
     game = Game(row_count=rows, col_count=cols)
-    # TODO: Remove asserts after test cases are added
-    assert game.head.is_head()
-    assert game.head is not None
 
     game.render_screen()
     game_loop = threading.Thread(target=game.refresh_game_state)
