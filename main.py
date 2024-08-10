@@ -12,6 +12,11 @@ def start_game(rows: int, cols: int):
     game_loop.start()
     user_input_loop.start()
 
+    game_loop.join()
+    user_input_loop.join()
+
+    game.display_score()
+
 
 def main():
     start_game(10, 10)
