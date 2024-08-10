@@ -1,12 +1,14 @@
 """This file renders the game screen
 
 Each cell in the grid has following attributes:
-    - value [" ", "0", "#"]
+    - value [" ", "0", "#", "@"]
         - Blank means that cell is empty
         - 0 depicts the body parts of the snake
         - # is the head of the snake
+        - @ is the current location of food
     - next direction
 """
+from __future__ import  annotations
 
 import os
 import random
@@ -28,7 +30,7 @@ class Direction(int, Enum):
     UP = 3
 
     @cached_property
-    def opposite(self):
+    def opposite(self) -> Direction:
         if self == Direction.LEFT:
             return Direction.RIGHT
 
@@ -46,6 +48,7 @@ grid_lock = threading.Lock()
 EMPTY = " "
 BODY = "0"
 HEAD = "#"
+FOOD = "@"
 
 
 @dataclass
@@ -72,6 +75,9 @@ class Cell:
     def is_head(self) -> bool:
         return self.value == HEAD
 
+    def is_food(self) -> bool:
+        return self.value == FOOD
+
 
 Row = list[Cell]
 Grid = list[Row]
@@ -83,10 +89,13 @@ class Game:
     def __init__(self, row_count: int, col_count: int):
         self.row_count = row_count
         self.col_count = col_count
-        self.score: int = 0
         self.__grid = self.__generate_screen()
         self.__head = self.__initiate_head(self.grid)
-        self.sleep_time = 1.0
+        self.__sleep_time = 1.0
+        self.food = self.__generate_food()
+        self.__score: int = 0
+        self.game_over = False
+        self.quit = False
 
     def __generate_screen(self) -> Grid:
         return [[Cell() for _ in range(self.col_count)] for _ in range(self.row_count)]
@@ -101,8 +110,20 @@ class Game:
         head.moving = random.choice([d for d in Direction])
         return head
 
+    def __generate_food(self) -> Cell:
+        while True:
+            x, y = (
+                random.randint(0, self.row_count - 1),
+                random.randint(0, self.col_count - 1),
+            )
+            if self.grid[x][y].is_empty():
+                food = self.grid[x][y]
+                food.value = FOOD
+                break
+        return food
+
     @property
-    def grid(self):
+    def grid(self) -> Grid:
         return self.__grid
 
     @grid.setter
@@ -110,12 +131,34 @@ class Game:
         raise NotImplementedError
 
     @property
-    def head(self):
+    def head(self) -> Cell:
         return self.__head
 
     @head.setter
     def head(self, _):
         raise NotImplementedError
+
+    @property
+    def score(self) -> int:
+        return self.__score
+
+    @score.setter
+    def score(self, _):
+        raise NotImplementedError
+
+    def increment_score(self):
+        self.__score += 1
+
+    @property
+    def sleep_time(self) -> float:
+        return self.__sleep_time
+
+    @sleep_time.setter
+    def sleep_time(self, _):
+        raise NotImplementedError
+
+    def update_sleep_time(self):
+        self.__sleep_time *= 0.9
 
     def update_grid_and_head(self, _grid: Grid, _head: Cell):
         self.__grid = _grid
@@ -127,6 +170,7 @@ class Game:
         self.render_screen()
 
     def move_snake(self):
+        # TODO: The snake can be treated as a linked list to remove the O(N^2).
         grid = self.grid
 
         new_grid: Grid = [
@@ -138,28 +182,55 @@ class Game:
                 if cell.is_empty():
                     continue
 
+                if cell.is_food():
+                    new_grid[i][j].value = FOOD
+                    continue
+
                 assert cell.moving is not None, f"({i}, {j}) -> {cell.value}"
 
                 next_x, next_y = next_location(
                     self.row_count, self.col_count, i, j, cell.moving
                 )
+                if grid[next_x][next_y].is_food():
+                    # We are always under the assumption that food and snake's body won't coincide and
+                    # food can be reached only through the head.
+                    assert cell.is_head()
+
+                    # In this case no change is needed for the rest of the snake. Just update the head to a nurmal body
+                    # cell and convert food to head. And return the modified existing grid.
+                    # TODO: The corner could be a corner case.
+                    grid[i][j].value = BODY
+                    grid[i][j].moving = cell.moving
+                    grid[next_x][next_y].value = HEAD
+                    grid[next_x][next_y].moving = cell.moving
+                    self.increment_score()
+                    self.food = self.__generate_food()
+                    self.update_grid_and_head(grid, grid[next_x][next_y])
+                    self.update_sleep_time()
+                    return
+
                 new_grid[next_x][next_y].value = cell.value
-                if cell.is_body():
-                    new_grid[next_x][next_y].moving = grid[next_x][next_y].moving
-                else:  # head
+                if cell.is_head():
+                    # Check for collision
+                    if grid[next_x][next_y].is_body():
+                        self.game_over = True
+                        sys.exit(0)
                     new_grid[next_x][next_y].moving = cell.moving
                     new_head = new_grid[next_x][next_y]
+                else:  # body
+                    new_grid[next_x][next_y].moving = grid[next_x][next_y].moving
 
         self.update_grid_and_head(new_grid, new_head)
 
     def refresh_game_state(self):
-        while True:
-            time.sleep(self.sleep_time)
+        while not self.quit:
+            time.sleep(self.__sleep_time)
             self.move_snake_and_render_screen()
 
     def render_screen(self):
         """Render the screen"""
         clear_screen()
+        print(f"SCORE: {self.score}")
         # render borders.
         print("_" * (self.col_count + 2))
         # render each element
@@ -185,10 +256,11 @@ class Game:
         }
 
         with single_char_input_mode():
-            while True:
+            while not self.game_over:
                 try:
                     c = sys.stdin.read(1)
                     if c == "q":
+                        self.quit = True
                         sys.exit(0)
                     new_direction = direction_mapping[c]
                     head = self.head
@@ -202,6 +274,9 @@ class Game:
                 except (IOError, KeyError):
                     pass
 
+    def display_score(self):
+        print(f"FINAL SCORE: {self.score}")
+
 
 def clear_screen():
     os.system("clear")
@@ -210,7 +285,7 @@ def clear_screen():
 def next_location(
     row_count: int, col_count: int, x: int, y: int, direction: Direction
 ) -> tuple[int, int]:
-    """ Find the next location of the cell as per the direction
+    """Find the next location of the cell as per the direction
 
     Args:
         row_count: Number of horizontal rows in the game
